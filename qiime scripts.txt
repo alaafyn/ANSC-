@@ -1,24 +1,11 @@
-useful website:https://chmi-sops.github.io/mydoc_qiime2.html
-explanation on beta significance: https://forum.qiime2.org/t/beta-diversity-explanation-jaccard-distance/15216/11
-https://www.yanh.org/2021/01/01/microbiome-r/   #full tutorial
 
-copy to cluster: scp "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\oluManifest.txt" oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/Projectdata
 
-#copy from cluster to computer
-scp user1@cluster.example.com:"/path/to/remote/files/*.qzv" "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project/"
-
-#my work is saved on /scratch/bell/oolowe/qiime/manifest_import
-Dr Johnson website: https://github.com/john2929/ANSC516/wiki/2.2-QIIME2-pipeline-via-sbatch
-***copying data from gcore
-
-Log in: oolowe@@bell.rcac.purdue.edu
 Backend: sinteractive -A microbiome -t 5:00:00 -n90
 Scracth: $RCAC_SCRATCH                       #you can work on scratch for a while but do not save data here permanently 
 Depot: cd /depot/microbiome/data        
 Make a directory : mkdr Olumide_study  
 
-#copying from genome
-cp /depot/gcore/web/users/adeola/hr03724_Adeola-Olumide-Seaweed/*/Unaligned/*R[1-2]_001.fastq.gz .
+
 
 *make a metadata (excel file containing the treatments and arrangements)
 *add the metadata (in csv or txt) to the directory
@@ -26,7 +13,7 @@ cp /depot/gcore/web/users/adeola/hr03724_Adeola-Olumide-Seaweed/*/Unaligned/*R[1
 *Then get your data and metadata loaded into qiime2 using the `qiime tools *import` command (You only need to complete the first two steps of the qiime2 process) The output of this commands will be:demux.qza and demux.qzv.
 
 ***manifest code*
-sinteractive -A microbiome -t 2:30:00 -n4 : for the start
+
 cd /scratch/bell/oolowe      #username in scractch
 mkdir qiime/manifest_import      #making directory to where to copy the data 
 mkdir qiime/manifest_import/seqs #making directory to where to copy the data 
@@ -72,7 +59,6 @@ qiime demux summarize \
   --o-visualization demux.qzv
 
 #then save the demux.qzv to laptop using SCP.
-
 
 ##De-noise. Error corrections.
 
@@ -263,8 +249,7 @@ qiime composition da-barplot \
   --p-level-delimiter ';' \
   --o-visualization l6-da-barplot-subject.qzv
 
-
-#lefse (https://dc.ewu.edu/cgi/viewcontent.cgi?article=1746&context=theses)
+#FOR LEFse
 
 qiime taxa collapse \
   --i-table  core-metrics-results/rarefied_table.qza \
@@ -413,65 +398,3 @@ qiime sample-classifier heatmap \
   --o-heatmap rforest-classifier/important-feature-heatmap.qzv
 
 
-
-#copy results
- scp oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/qiime/project/ancom-treatment.qzv . "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\Project output"
-
-scp oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/qiime/project/core-metrics-results/taxa-bar-plots.qzv . "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\Project output"
-
-
-
-
- l6-da-barplot-subject.qzv
-da-barplot-subject.qzv
-
-
-scp oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/Projectdata/da-barplot-subject.qzv . "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\Project output"
-
-/scratch/bell/oolowe/Projectdata
-
-#Taxa Barplot
-qiime taxa barplot \
-  --i-table table-dada2.qza \
-  --i-taxonomy taxonomy.qza \
-  --m-metadata-file project_metadata.txt \
-  --o-visualization taxa-bar-plots.qzv
-
-#ANCOMBC
-qiime feature-table filter-samples \
-  --i-table table-dada2.qza  \
-  --m-metadata-file project_metadata.txt \
-  --p-where "[body-site]='Cecal'" \
-  --o-filtered-table gut-table.qza
-
-qiime composition ancombc \
-  --i-table gut-table.qza \
-  --m-metadata-file project_metadata.txt \
-  --p-formula 'treatment' \
-  --o-differentials ancombc-subject.qza
-
-qiime composition da-barplot \
-  --i-data ancombc-subject.qza \
-  --p-significance-threshold 0.05 \
-  --o-visualization da-barplot-subject.qzv
-
-qiime taxa collapse \
-  --i-table gut-table.qza \
-  --i-taxonomy taxonomy.qza \
-  --p-level 6 \
-  --o-collapsed-table gut-table-l6.qza
-
-qiime composition ancombc \
-  --i-table gut-table-l6.qza \
-  --m-metadata-file project_metadata.txt \
-  --p-formula 'treatment' \
-  --o-differentials l6-ancombc-subject.qza
-
-qiime composition da-barplot \
-  --i-data l6-ancombc-subject.qza \
-  --p-significance-threshold 0.05 \
-  --p-level-delimiter ';' \
-  --o-visualization l6-da-barplot-subject.qzv
-
-https://nuriamw.github.io/micro4all/tutorial/package_workflow.html#alpha-diversity
-https://chmi-sops.github.io/mydoc_qiime2.html
