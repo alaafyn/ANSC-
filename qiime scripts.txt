@@ -1,0 +1,477 @@
+useful website:https://chmi-sops.github.io/mydoc_qiime2.html
+explanation on beta significance: https://forum.qiime2.org/t/beta-diversity-explanation-jaccard-distance/15216/11
+https://www.yanh.org/2021/01/01/microbiome-r/   #full tutorial
+
+copy to cluster: scp "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\oluManifest.txt" oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/Projectdata
+
+#copy from cluster to computer
+scp user1@cluster.example.com:"/path/to/remote/files/*.qzv" "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project/"
+
+#my work is saved on /scratch/bell/oolowe/qiime/manifest_import
+Dr Johnson website: https://github.com/john2929/ANSC516/wiki/2.2-QIIME2-pipeline-via-sbatch
+***copying data from gcore
+
+Log in: oolowe@@bell.rcac.purdue.edu
+Backend: sinteractive -A microbiome -t 5:00:00 -n90
+Scracth: $RCAC_SCRATCH                       #you can work on scratch for a while but do not save data here permanently 
+Depot: cd /depot/microbiome/data        
+Make a directory : mkdr Olumide_study  
+
+#copying from genome
+cp /depot/gcore/web/users/adeola/hr03724_Adeola-Olumide-Seaweed/*/Unaligned/*R[1-2]_001.fastq.gz .
+
+*make a metadata (excel file containing the treatments and arrangements)
+*add the metadata (in csv or txt) to the directory
+*Make the manifest file that will allow you to import your sequence data into qiime.
+*Then get your data and metadata loaded into qiime2 using the `qiime tools *import` command (You only need to complete the first two steps of the qiime2 process) The output of this commands will be:demux.qza and demux.qzv.
+
+***manifest code*
+sinteractive -A microbiome -t 2:30:00 -n4 : for the start
+cd /scratch/bell/oolowe      #username in scractch
+mkdir qiime/manifest_import      #making directory to where to copy the data 
+mkdir qiime/manifest_import/seqs #making directory to where to copy the data 
+cd qiime/manifest_import/	#making directory to where to copy the data 
+cp /depot/microbiome/data/ANSC516/olumide/projectdata/*gz .    #copy data from depot, where i stored the data into seqs
+ls  #list things in seqs
+
+*Make an excel sheet to contain  #sample-id forward-absolute-filepath reverse-absolute-filepath and copy to dir;
+scp path/to/file <user.name>@bell.rcac.purdue.edu:/depot/microbiome/data/ANSC516/<your.directory>/
+
+
+ls -1 "$PWD/"*_R1_* #ask unix to give us all the paths to the forward read files
+ls -1 "$PWD/"*_R2_* #for the reverse filepath
+
+#copy R1 into forward-absolute-filepath and R2 output into reverse-absolute-filepath
+
+/depot/microbiome/data/olumide/Seaweedstudy/Seqdata
+
+##importing to qiime
+#loading qiime first
+
+module load bioinfo
+module load Qiime/2-2023.9
+module list
+
+#import
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path oluManifest.txt \
+  --output-path demux.qza \
+  --input-format PairedEndFastqManifestPhred33V2
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path oluManifest.txt \                                
+  --input-format PairedEndFastqManifestPhred33V2 \
+  --output-path demux.qza
+
+#Visualise the demux to know where to trim and truncate in preparation for DADA***
+
+qiime demux summarize \
+  --i-data demux.qza \
+  --o-visualization demux.qzv
+
+#then save the demux.qzv to laptop using SCP.
+
+
+##De-noise. Error corrections.
+
+echo "dada2"
+qiime dada2 denoise-paired \
+   --i-demultiplexed-seqs demux.qza \
+  --p-trim-left-f 13 \
+  --p-trim-left-r 13 \
+  --p-trunc-len-f 220 \
+  --p-trunc-len-r 150 \
+  --o-representative-sequences rep-seqs-dada2.qza \
+  --o-table table-dada2.qza \
+  --o-denoising-stats stats-dada2.qza
+
+#Convert .qza to .qzv format
+
+qiime metadata tabulate \
+  --m-input-file stats-dada2.qza \
+  --o-visualization stats-dada2.qza.qzv
+
+#Create a .qzv from the output of denoise
+
+qiime feature-table summarize \
+  --i-table table-dada2.qza \
+  --o-visualization table.qzv \
+  --m-sample-metadata-file project_metadata.txt
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs-dada2.qza \
+  --o-visualization rep-seqs.qzv
+
+#Generate a tree for phylogenetic diversity analyses
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences rep-seqs-dada2.qza \
+  --o-alignment aligned-rep-seqs-dada2.qza \
+  --o-masked-alignment masked-aligned-rep-seqs-dada2.qza \
+  --o-tree unrooted-tree.qza \
+  --o-rooted-tree rooted-tree.qza
+
+#Alpha-rarefaction to decide the sampling depth
+
+qiime diversity alpha-rarefaction \
+  --i-table table-dada2.qza \
+  --i-phylogeny rooted-tree.qza \
+  --p-max-depth 96156 \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization alpha-rarefaction.qzv
+
+
+#Alpha and beta diversity analysis
+
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny rooted-tree.qza \
+  --i-table table-dada2.qza  \
+  --p-sampling-depth 13900 \
+  --m-metadata-file project_metadata.txt \
+  --output-dir core-metrics-results
+
+
+#Alpha diversity
+qiime diversity alpha \
+  --i-table table-dada2.qza \
+  --p-metric chao1 \
+  --o-alpha-diversity chao1.qza
+
+qiime diversity alpha \
+  --i-table table-dada2.qza \
+  --p-metric pielou_e \
+  --o-alpha-diversity pielou_evenness.qza
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity pielou_evenness.qza \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization core-metrics-results/pielou_evenness.qzv
+
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity chao1.qza \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization core-metrics-results/chao1.qzv
+
+#Alpha group significance
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/faith_pd_vector.qza \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization core-metrics-results/faith-pd-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/evenness_vector.qza \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization core-metrics-results/evenness-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+    --i-alpha-diversity core-metrics-results/shannon_vector.qza \
+    --m-metadata-file project_metadata.txt \
+    --o-visualization core-metrics-results/shannon_group-significance.qzv
+
+qiime diversity alpha-group-significance \
+    --i-alpha-diversity core-metrics-results/observed_features_vector.qza \
+    --m-metadata-file project_metadata.txt \
+    --o-visualization core-metrics-results/observed_features_group-significance.qzv
+
+#Beta-group significance 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file project_metadata.txt \
+  --m-metadata-column time-point \
+  --o-visualization core-metrics-results/unweighted-unifrac-timepoint-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file project_metadata.txt \
+  --m-metadata-column treatment \
+  --o-visualization core-metrics-results/unweighted-unifrac-subject-group-significance.qzv \
+  --p-pairwise
+
+#emperor plots
+
+qiime emperor plot \
+  --i-pcoa core-metrics-results/unweighted_unifrac_pcoa_results.qza \
+  --m-metadata-file project_metadata.txt \
+  --p-custom-axes day \
+  --o-visualization core-metrics-results/unweighted-unifrac-emperor-timepoint.qzv
+
+qiime emperor plot \
+  --i-pcoa core-metrics-results/bray_curtis_pcoa_results.qza \
+  --m-metadata-file project_metadata.txt \
+  --p-custom-axes day \
+  --o-visualization core-metrics-results/bray-curtis-emperor-timepoint.qzv
+
+#download classifier for taxonomic analysis
+wget \
+  -O "gg-13-8-99-515-806-nb-classifier.qza" \
+  "https://data.qiime2.org/2023.9/common/gg-13-8-99-515-806-nb-classifier.qza"
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier gg-13-8-99-515-806-nb-classifier.qza \
+  --i-reads rep-seqs-dada2.qza  \
+  --o-classification taxonomy.qza
+
+qiime metadata tabulate \
+  --m-input-file taxonomy.qza \
+  --o-visualization taxonomy.qzv
+
+#Taxa Barplot
+qiime taxa barplot \
+  --i-table table-dada2.qza \
+  --i-taxonomy taxonomy.qza \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization taxa-bar-plots.qzv
+
+#ANCOMBC
+qiime feature-table filter-samples \
+  --i-table table-dada2.qza  \
+  --m-metadata-file project_metadata.txt \
+  --p-where "[body-site]='Cecal'" \
+  --o-filtered-table gut-table.qza
+
+qiime composition ancombc \
+  --i-table gut-table.qza \
+  --m-metadata-file project_metadata.txt \
+  --p-formula 'treatment' \
+  --o-differentials ancombc-subject.qza
+
+qiime composition da-barplot \
+  --i-data ancombc-subject.qza \
+  --p-significance-threshold 0.05 \
+  --o-visualization da-barplot-subject.qzv
+
+qiime taxa collapse \
+  --i-table gut-table.qza \
+  --i-taxonomy taxonomy.qza \
+  --p-level 6 \
+  --o-collapsed-table gut-table-l6.qza
+
+
+qiime composition ancombc \
+  --i-table gut-table-l6.qza \
+  --m-metadata-file project_metadata.txt \
+  --p-formula 'treatment' \
+  --o-differentials l6-ancombc-subject.qza
+
+qiime composition da-barplot \
+  --i-data l6-ancombc-subject.qza \
+  --p-significance-threshold 0.05 \
+  --p-level-delimiter ';' \
+  --o-visualization l6-da-barplot-subject.qzv
+
+
+#lefse (https://dc.ewu.edu/cgi/viewcontent.cgi?article=1746&context=theses)
+
+qiime taxa collapse \
+  --i-table  core-metrics-results/rarefied_table.qza \
+  --i-taxonomy taxonomy.qza \
+  --p-level 6 \
+  --o-collapsed-table filtered-table-l6.qza 
+
+
+qiime feature-table relative-frequency \
+  --i-table filtered-table-l6.qza \
+  --o-relative-frequency-table frequency-table-l6.qza 
+
+#Exporting straight ASV table, non-collapsed, rarefied = do not include taxonomy header → total ASV,
+individual ASVs for the non-collapsed
+
+
+#Export biom file from QIIME: variations of this code will work to export other data from QIIME as
+well for other uses besides LEfSe analyses
+
+qiime tools export \
+  --input-path frequency-table-l6.qza \
+  --output-path lefse-files
+
+
+#Convert biom to text file (for LEfSe comparison)
+biom convert \
+--input-fp lefse-files/feature-table.biom \
+--output-fp lefse-files/frequency-table-l6.txt \
+--sample-metadata-fp project_metadata.txt \
+--header-key "taxonomy" \
+--to-tsv
+
+#Using PICRUST2 
+sinteractive -A microbiome -t 2:30:00 -n40
+module use /depot/microbiome/apps/modulefiles
+module load conda-env/qiime2-2021.11-py3.8.5
+
+
+#make Table.qza and Rep.seq.qza
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path oluManifest.txt \
+  --output-path q2-picrust2_output/demux.qza \
+  --input-format PairedEndFastqManifestPhred33V2
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path oluManifest.txt \                                
+  --input-format PairedEndFastqManifestPhred33V2 \
+  --output-path q2-picrust2_output/demux.qza
+
+qiime demux summarize \
+  --i-data q2-picrust2_output/demux.qza \
+  --o-visualization q2-picrust2_output/demux.qzv
+
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs q2-picrust2_output/demux.qza \
+  --p-trim-left-f 13 \
+  --p-trim-left-r 13 \
+  --p-trunc-len-f 220 \
+  --p-trunc-len-r 150 \
+  --o-representative-sequences q2-picrust2_output/rep-seqs-dada2.qza \
+  --o-table q2-picrust2_output/table-dada2.qza \
+  --o-denoising-stats q2-picrust2_output/stats-dada2.qza
+
+
+qiime metadata tabulate \
+  --m-input-file q2-picrust2_output/stats-dada2.qza \
+  --o-visualization q2-picrust2_output/stats-dada2.qza.qzv
+
+qiime feature-table summarize \
+  --i-table q2-picrust2_output/table-dada2.qza \
+  --o-visualization q2-picrust2_output/table.qzv \
+  --m-sample-metadata-file project_metadata.txt
+
+qiime feature-table tabulate-seqs \
+  --i-data q2-picrust2_output/rep-seqs-dada2.qza \
+  --o-visualization q2-picrust2_output/rep-seqs.qzv
+
+#picrust2
+qiime picrust2 full-pipeline \
+   --i-table q2-picrust2_output/table-dada2.qza \
+   --i-seq q2-picrust2_output/rep-seqs-dada2.qza \
+   --output-dir mainpicrust2_output \
+   --p-placement-tool sepp \
+   --p-threads 4 \
+   --p-hsp-method pic \
+   --p-max-nsti 2 \
+   --verbose
+
+qiime feature-table summarize \
+  --i-table mainpicrust2_output/pathway_abundance.qza \
+  --o-visualization mainpicrust2_output/pathway_abundance.qzv
+
+
+qiime tools export \
+  --input-path mainpicrust2_output/pathway_abundance.qza \
+  --output-path mainpicrust2_output/pathabun_exported
+
+biom convert\
+ -i mainpicrust2_output/pathabun_exported/feature-table.biom \
+ -o mainpicrust2_output/pathabun_exported/feature-table.biom.tsv \
+ --to-tsv
+
+
+#RANDOM FORESTS
+
+qiime sample-classifier classify-samples \
+  --i-table core-metrics-results/rarefied_table.qza \
+  --m-metadata-file project_metadata.txt \
+  --m-metadata-column treatment \
+  --p-optimize-feature-selection \
+  --p-parameter-tuning \
+  --p-estimator RandomForestClassifier \
+  --p-n-estimators 20 \
+  --p-random-state 123 \
+  --output-dir rforest-classifier
+
+
+qiime metadata tabulate \
+  --m-input-file rforest-classifier/predictions.qza \
+  --o-visualization rforest-classifier/predictions.qzv
+
+qiime metadata tabulate \
+  --m-input-file rforest-classifier/probabilities.qza \
+  --o-visualization rforest-classifier/probabilities.qzv
+
+qiime metadata tabulate \
+  --m-input-file rforest-classifier/feature_importance.qza \
+  --o-visualization rforest-classifier/feature_importance.qzv
+
+qiime feature-table filter-features \
+  --i-table table-dada2.qza \
+  --m-metadata-file rforest-classifier/feature_importance.qza \
+  --o-filtered-table rforest-classifier/important-feature-table.qza
+
+qiime sample-classifier heatmap \
+  --i-table table-dada2.qza \
+  --i-importance rforest-classifier/feature_importance.qza \
+  --m-sample-metadata-file project_metadata.txt \
+  --m-sample-metadata-column treatment \
+  --p-group-samples \
+  --p-feature-count 30 \
+  --o-filtered-table rforest-classifier/important-feature-table-top-30.qza \
+  --o-heatmap rforest-classifier/important-feature-heatmap.qzv
+
+
+
+#copy results
+ scp oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/qiime/project/ancom-treatment.qzv . "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\Project output"
+
+scp oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/qiime/project/core-metrics-results/taxa-bar-plots.qzv . "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\Project output"
+
+
+
+
+ l6-da-barplot-subject.qzv
+da-barplot-subject.qzv
+
+
+scp oolowe@bell.rcac.purdue.edu:/scratch/bell/oolowe/Projectdata/da-barplot-subject.qzv . "C:\Users\OLUMIDE\Desktop\Purdue\Spring 2024\Molecular Microbiome Analysis ANSC516\project\Project output"
+
+/scratch/bell/oolowe/Projectdata
+
+#Taxa Barplot
+qiime taxa barplot \
+  --i-table table-dada2.qza \
+  --i-taxonomy taxonomy.qza \
+  --m-metadata-file project_metadata.txt \
+  --o-visualization taxa-bar-plots.qzv
+
+#ANCOMBC
+qiime feature-table filter-samples \
+  --i-table table-dada2.qza  \
+  --m-metadata-file project_metadata.txt \
+  --p-where "[body-site]='Cecal'" \
+  --o-filtered-table gut-table.qza
+
+qiime composition ancombc \
+  --i-table gut-table.qza \
+  --m-metadata-file project_metadata.txt \
+  --p-formula 'treatment' \
+  --o-differentials ancombc-subject.qza
+
+qiime composition da-barplot \
+  --i-data ancombc-subject.qza \
+  --p-significance-threshold 0.05 \
+  --o-visualization da-barplot-subject.qzv
+
+qiime taxa collapse \
+  --i-table gut-table.qza \
+  --i-taxonomy taxonomy.qza \
+  --p-level 6 \
+  --o-collapsed-table gut-table-l6.qza
+
+qiime composition ancombc \
+  --i-table gut-table-l6.qza \
+  --m-metadata-file project_metadata.txt \
+  --p-formula 'treatment' \
+  --o-differentials l6-ancombc-subject.qza
+
+qiime composition da-barplot \
+  --i-data l6-ancombc-subject.qza \
+  --p-significance-threshold 0.05 \
+  --p-level-delimiter ';' \
+  --o-visualization l6-da-barplot-subject.qzv
+
+https://nuriamw.github.io/micro4all/tutorial/package_workflow.html#alpha-diversity
+https://chmi-sops.github.io/mydoc_qiime2.html
